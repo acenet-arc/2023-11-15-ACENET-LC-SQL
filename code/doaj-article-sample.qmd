@@ -1,0 +1,106 @@
+---
+title: "Accessing SQLite Databases Using Python and Pandas"
+format: html
+editor: visual
+---
+
+## Accessing SQLite Databases Using Python and Pandas
+
+Objectives
+
+-   Access a database from R.
+-   Run SQL queries in R using `RSQLite` and `dplyr`.
+
+## R and SQL
+
+### The `RSQLite` module
+
+```{r}
+# Load necessary modules for `tbl` and `sql`
+library(dplyr)
+library(dbplyr)
+```
+
+```{r}
+# Create a SQL connection to our SQLite database
+con <- DBI::dbConnect(RSQLite::SQLite(), "doaj-article-sample.db")
+
+# Run the SQL query
+tbl(con, sql("SELECT * FROM publishers"))
+
+# Be sure to close the connection.
+DBI::dbDisconnect(con)
+```
+
+### Query examples
+
+```{r}
+# Create a SQL connection to our SQLite database
+con <- DBI::dbConnect(RSQLite::SQLite(), "doaj-article-sample.db")
+```
+
+```{r}
+# Get all table names
+src_dbi(con)
+```
+
+```{r}
+# Get the top journals with the highest average citation count
+tbl(con, sql(paste(
+  "SELECT ISSNs, AVG(Citation_Count)",
+  "FROM articles",
+  "GROUP BY ISSNs",
+  "ORDER BY AVG(Citation_Count) DESC"
+)))
+```
+
+```{r}
+# Get all records where the Subject contains "Crystal Structure"
+subjects <- tbl(con, sql(paste(
+  "SELECT Subjects",
+  "FROM articles",
+  "WHERE Subjects LIKE '%Crystal Structure%'"
+)))
+
+head(subjects, n=5)
+```
+
+```{r}
+# Return only the first result of a query
+head(tbl(con, sql(paste(
+  "SELECT journals.Journal_Title, publishers.Publisher, COUNT(*)",
+  "FROM articles",
+  "JOIN journals",
+  "ON articles.ISSNs = journals.ISSNs",
+  "JOIN publishers",
+  "ON publishers.id = journals.PublisherId",
+  "GROUP BY Journal_Title",
+  "ORDER BY COUNT(*) DESC"
+))), n=1)
+```
+
+```{r}
+# Be sure to close the connection.
+DBI::dbDisconnect(con)
+```
+
+## Querying the database with the `dplyr` syntax
+
+```{r}
+con <- DBI::dbConnect(RSQLite::SQLite(), "doaj-article-sample.db")
+articles <- tbl(con, "articles")
+journals <- tbl(con, "journals")
+publishers <- tbl(con, "publishers")
+
+best_journals <- articles %>%
+  inner_join(journals, by="ISSNs") %>%
+  inner_join(publishers, by=c("PublisherId"="id")) %>%
+  group_by(Journal_Title, Publisher) %>%
+  summarise(count=n(), .groups="keep") %>%
+  arrange(desc(count)) %>%
+  head(n=8)
+
+show_query(best_journals)
+best_journals  # Query executed here
+DBI::dbDisconnect(con)
+```
